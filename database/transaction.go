@@ -100,7 +100,7 @@ func (t *Txn) Delete(name string) {
 		doDelete(name, t.db.nameToValue, t.db.valueToNames)
 		return
 	}
-	delete(t.delNames, name)
+	t.delNames[name] = struct{}{}
 	doDelete(name, t.updateNameToValue, t.updateValueToNames)
 }
 
