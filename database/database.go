@@ -20,21 +20,33 @@ const (
 )
 
 var (
-	TransactionNotFoundErr = errors.New("TRANSACTION NOT FOUND")
-	EndOpErr               = errors.New("exiting database")
-	supportedOps           = []string{
+	EndOpErr     = errors.New("exiting database")
+	supportedOps = []string{
 		beginOp, commitOp, delOp, getOp, endOp, rollbackOp, setOp,
 	}
 )
 
+type set map[string]struct{}
+
 type Database struct {
-	trans *transaction
+	nameToValue  map[string]string
+	valueToNames map[string]set
+	trans        *transaction
 }
 
 func New() *Database {
-	return &Database{
-		trans: nil,
+	db := &Database{
+		nameToValue:  make(map[string]string),
+		valueToNames: make(map[string]set),
+		trans:        nil,
 	}
+	db.trans = &transaction{
+		delNames:           make(set),
+		updateNameToValue:  make(map[string]string),
+		updateValueToNames: make(map[string]set),
+		db:                 db,
+	}
+	return db
 }
 
 func (d *Database) Set(name, value string) {

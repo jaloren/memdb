@@ -1,21 +1,64 @@
 package database
 
-import "golang.org/x/exp/maps"
+import (
+	"errors"
+	"golang.org/x/exp/maps"
+)
 
-type set map[string]struct{}
+var (
+	TransactionNotFoundErr = errors.New("TRANSACTION NOT FOUND")
+)
 
 type transaction struct {
-	delNames     set
-	nameToValue  map[string]string
-	valueToNames map[string]set
-	prev         *transaction
+	db                 *Database
+	delNames           set
+	updateNameToValue  map[string]string
+	updateValueToNames map[string]set
+	prev               *transaction
+}
+
+func (t *transaction) beginTransaction() *transaction {
+	return &transaction{
+		delNames:           make(set),
+		updateNameToValue:  make(map[string]string),
+		updateValueToNames: make(map[string]set),
+		prev:               t,
+	}
+
+}
+
+func (t *transaction) rollback() (*transaction, error) {
+	if t.prev == nil {
+		return nil, TransactionNotFoundErr
+	}
+	return t.prev, nil
+}
+
+func (t *transaction) commit() *transaction {
+	if t.db != nil {
+		return t
+	}
+	for name, value := range t.updateNameToValue {
+		t.prev.set(name, value)
+	}
+	for name := range t.delNames {
+		t.prev.delete(name)
+	}
+	return t.prev.commit()
 }
 
 func (t *transaction) get(name string) string {
+	if t.db != nil {
+		val, ok := t.db.nameToValue[name]
+		if !ok {
+			return nullValue
+		}
+		return val
+	}
 	if _, ok := t.delNames[name]; ok {
 		return nullValue
 	}
-	if updateVal, ok := t.nameToValue[name]; ok {
+	if updateVal, ok := t.updateNameToValue[name]; ok {
 		return updateVal
 	}
 	if t.prev != nil {
@@ -25,29 +68,44 @@ func (t *transaction) get(name string) string {
 }
 
 func (t *transaction) set(name, value string) {
+	if t.db != nil {
+		t.db.nameToValue[name] = value
+		names := t.db.valueToNames[value]
+		names[name] = struct{}{}
+		t.db.valueToNames[value] = names
+		return
+	}
 	if t.prev != nil && t.prev.get(name) == value {
 		return
 	}
 	delete(t.delNames, name)
-	t.nameToValue[name] = value
-	if names, ok := t.valueToNames[value]; ok {
+	t.updateNameToValue[name] = value
+	if names, ok := t.updateValueToNames[value]; ok {
 		names[name] = struct{}{}
-		t.valueToNames[value] = names
+		t.updateValueToNames[value] = names
 	} else {
-		t.valueToNames[value] = set{
+		t.updateValueToNames[value] = set{
 			name: {},
 		}
 	}
 }
 
 func (t *transaction) delete(name string) {
-	t.delNames[name] = struct{}{}
-	delete(t.nameToValue, name)
-	val, ok := t.nameToValue[name]
+	if t.db != nil {
+		doDelete(name, t.db.nameToValue, t.db.valueToNames)
+		return
+	}
+	delete(t.delNames, name)
+	doDelete(name, t.updateNameToValue, t.updateValueToNames)
+}
+
+func doDelete(name string, nameToValue map[string]string, valueToNames map[string]set) {
+	val, ok := nameToValue[name]
 	if !ok {
 		return
 	}
-	names, ok := t.valueToNames[val]
+	delete(nameToValue, name)
+	names, ok := valueToNames[val]
 	if !ok {
 		return
 	}
@@ -59,6 +117,9 @@ func (t *transaction) delete(name string) {
 }
 
 func (t *transaction) count(value string) int {
+	if t.db != nil {
+		return len(t.db.valueToNames[value])
+	}
 	return len(t.names(value))
 }
 
@@ -68,14 +129,14 @@ func (t *transaction) names(value string) set {
 		allNames = t.prev.names(value)
 	}
 	for name := range allNames {
-		if _, ok := t.nameToValue[name]; ok {
+		if _, ok := t.updateNameToValue[name]; ok {
 			delete(allNames, name)
 		}
 		if _, ok := t.delNames[name]; ok {
 			delete(allNames, name)
 		}
 	}
-	if names, ok := t.valueToNames[value]; ok {
+	if names, ok := t.updateValueToNames[value]; ok {
 		maps.Copy(allNames, names)
 	}
 	return allNames
