@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 const (
@@ -29,25 +28,21 @@ var (
 )
 
 type Database struct {
-	data         map[string]*string
-	valCnt       map[string]int
-	mu           sync.RWMutex
-	transactions *transaction
+	data   map[string]*string
+	valCnt map[string]int
+	trans  *transaction
 }
 
 func New() *Database {
 	return &Database{
 		data:   make(map[string]*string),
 		valCnt: make(map[string]int),
-		mu:     sync.RWMutex{},
 	}
 }
 
 func (d *Database) Set(name, value string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.transactions != nil {
-		d.transactions.add(d, name, ptr(value))
+	if d.trans != nil {
+		d.trans.add(d, name, ptr(value))
 		return
 	}
 	if existing, ok := d.data[name]; ok && existing != nil {
@@ -63,10 +58,8 @@ func (d *Database) Set(name, value string) {
 }
 
 func (d *Database) Get(name string) string {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	if d.transactions != nil {
-		currentTransaction := d.transactions
+	if d.trans != nil {
+		currentTransaction := d.trans
 		val, ok := currentTransaction.get(name)
 		if ok {
 			return val
@@ -80,10 +73,8 @@ func (d *Database) Get(name string) string {
 }
 
 func (d *Database) Delete(name string) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.transactions != nil {
-		d.transactions.add(d, name, nil)
+	if d.trans != nil {
+		d.trans.add(d, name, nil)
 		return
 	}
 	if existing, ok := d.data[name]; ok && existing == nil {
@@ -96,13 +87,11 @@ func (d *Database) Delete(name string) {
 }
 
 func (d *Database) Count(value string) int {
-	d.mu.RLock()
-	defer d.mu.RUnlock()
-	if d.transactions == nil {
+	if d.trans == nil {
 		totalCnt, _ := d.valCnt[value]
 		return totalCnt
 	}
-	currentTrans := d.transactions
+	currentTrans := d.trans
 	for {
 		for transVal, transValCnt := range currentTrans.valCnt {
 			if transVal != value {
@@ -119,19 +108,15 @@ func (d *Database) Count(value string) int {
 }
 
 func (d *Database) BeginTransaction() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.transactions == nil {
-		d.transactions = newTransaction(nil)
+	if d.trans == nil {
+		d.trans = newTransaction(nil)
 	} else {
-		d.transactions = newTransaction(d.transactions)
+		d.trans = newTransaction(d.trans)
 	}
 }
 
 func (d *Database) CommitTransactions() {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	currentTrans := d.transactions
+	currentTrans := d.trans
 	for {
 		for name, value := range currentTrans.data {
 			d.data[name] = value
@@ -148,20 +133,18 @@ func (d *Database) CommitTransactions() {
 		}
 		currentTrans = currentTrans.prev
 	}
-	d.transactions = nil
+	d.trans = nil
 }
 
 func (d *Database) RollbackLastTransaction() error {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.transactions == nil {
+	if d.trans == nil {
 		return TransactionNotFoundErr
 	}
-	if d.transactions.prev == nil {
-		d.transactions = nil
+	if d.trans.prev == nil {
+		d.trans = nil
 		return nil
 	}
-	d.transactions = d.transactions.prev
+	d.trans = d.trans.prev
 	return nil
 }
 
