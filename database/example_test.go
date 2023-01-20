@@ -15,7 +15,7 @@ func TestExampleOne(t *testing.T) {
 	db.mustExecStatement(`SET b foo`)
 	claim.NoError(assertCount(db, "foo", 2))
 	claim.NoError(assertCount(db, "bar", 0))
-	db.Delete("a")
+	db.mustExecStatement(`DELETE a`)
 	claim.NoError(assertCount(db, "foo", 1))
 	db.mustExecStatement("SET b baz")
 	claim.NoError(assertCount(db, "foo", 0))
@@ -83,7 +83,7 @@ func assertCount(db *Database, value string, expected int) error {
 		return err
 	}
 	if actual != expected {
-		return fmt.Errorf("for value %s, expected count: %d, actual count: %d", value, expected, actual)
+		return fmt.Errorf("for value %s, expected Count: %d, actual Count: %d", value, expected, actual)
 	}
 	return nil
 }

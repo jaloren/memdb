@@ -31,43 +31,21 @@ type set map[string]struct{}
 type Database struct {
 	nameToValue  map[string]string
 	valueToNames map[string]set
-	trans        *transaction
+	transaction  *Txn
 }
 
 func New() *Database {
 	db := &Database{
 		nameToValue:  make(map[string]string),
 		valueToNames: make(map[string]set),
-		trans:        nil,
 	}
-	db.trans = &transaction{
+	db.transaction = &Txn{
 		delNames:           make(set),
 		updateNameToValue:  make(map[string]string),
 		updateValueToNames: make(map[string]set),
 		db:                 db,
 	}
 	return db
-}
-
-func (d *Database) Set(name, value string) {
-}
-
-func (d *Database) Get(name string) string {
-}
-
-func (d *Database) Delete(name string) {
-}
-
-func (d *Database) Count(value string) int {
-}
-
-func (d *Database) BeginTransaction() {
-}
-
-func (d *Database) CommitTransactions() {
-}
-
-func (d *Database) RollbackLastTransaction() error {
 }
 
 func (d *Database) ExecStatement(text string) (string, error) {
@@ -85,17 +63,22 @@ func (d *Database) ExecStatement(text string) (string, error) {
 	case setOp:
 		return "", d.parseSetStmt(parts)
 	case beginOp:
-		d.BeginTransaction()
+		d.transaction = d.transaction.Begin()
 		return "", nil
 	case endOp:
 		return "", EndOpErr
 	case commitOp:
-		d.CommitTransactions()
+		d.transaction = d.transaction.Commit()
 		return "", nil
 	case countOp:
 		return d.parseCntStmt(parts)
 	case rollbackOp:
-		return "", d.RollbackLastTransaction()
+		prev, err := d.transaction.Rollback()
+		if err != nil {
+			return "", err
+		}
+		d.transaction = prev
+		return "", nil
 	default:
 		return "", fmt.Errorf("database does not support operation %s: supported operations: %s",
 			operation, strings.Join(supportedOps, " "))
@@ -116,7 +99,7 @@ func (d *Database) parseCntStmt(parts []string) (string, error) {
 			countOp, strings.Join(parts, " "))
 	}
 	value := parts[1]
-	return strconv.Itoa(d.Count(value)), nil
+	return strconv.Itoa(d.transaction.Count(value)), nil
 }
 
 func (d *Database) parseDelStmt(parts []string) error {
@@ -125,7 +108,7 @@ func (d *Database) parseDelStmt(parts []string) error {
 			delOp, strings.Join(parts, " "))
 	}
 	name := parts[1]
-	d.Delete(name)
+	d.transaction.Delete(name)
 	return nil
 }
 
@@ -135,7 +118,7 @@ func (d *Database) parseGetStmt(parts []string) (string, error) {
 			getOp, strings.Join(parts, " "))
 	}
 	name := parts[1]
-	return d.Get(name), nil
+	return d.transaction.Get(name), nil
 }
 
 func (d *Database) parseSetStmt(parts []string) error {
@@ -145,6 +128,6 @@ func (d *Database) parseSetStmt(parts []string) error {
 	}
 	name := parts[1]
 	val := parts[2]
-	d.Set(name, val)
+	d.transaction.Set(name, val)
 	return nil
 }
