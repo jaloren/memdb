@@ -11,11 +11,11 @@ func TestExampleOne(t *testing.T) {
 	claim := assert.New(t)
 	db := New()
 	claim.Equal(nullValue, db.mustExecStatement(`GET a`))
-	db.mustExecStatement(`SET a foo`)
-	db.mustExecStatement(`SET b foo`)
-	claim.NoError(assertCount(db, "foo", 2))
-	claim.NoError(assertCount(db, "bar", 0))
-	db.mustExecStatement(`DELETE a`)
+	db.mustExecStatement(`SET a foo`)        // 1
+	db.mustExecStatement(`SET b foo`)        // 2
+	claim.NoError(assertCount(db, "foo", 2)) // 2
+	claim.NoError(assertCount(db, "bar", 0)) // 2
+	db.mustExecStatement(`DELETE a`)         // 1
 	claim.NoError(assertCount(db, "foo", 1))
 	db.mustExecStatement("SET b baz")
 	claim.NoError(assertCount(db, "foo", 0))

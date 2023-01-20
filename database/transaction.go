@@ -68,6 +68,9 @@ func (t *Txn) Get(name string) string {
 
 func (t *Txn) Set(name, value string) {
 	if t.db != nil {
+		exist, ok := t.db.nameToValue[name]
+		existingNames := t.db.valueToNames[exist]
+		delete(existingNames, name)
 		t.db.nameToValue[name] = value
 		names, ok := t.db.valueToNames[value]
 		if ok {
