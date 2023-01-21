@@ -174,5 +174,10 @@ func (t *Txn) names(value string) set {
 	if names, ok := t.updateValueToNames[value]; ok {
 		maps.Copy(allNames, names)
 	}
+	if t.db != nil {
+		if dbNames, ok := t.db.valueToNames[value]; ok {
+			maps.Copy(allNames, dbNames)
+		}
+	}
 	return allNames
 }
