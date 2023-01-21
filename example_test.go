@@ -75,6 +75,14 @@ func TestExampleFour(t *testing.T) {
 	claim.Equal("baz", mustGet(db, "b"))
 }
 
+func TestCountFromRootTransaction(t *testing.T) {
+	claim := assert.New(t)
+	db := database.New()
+	mustExecStatement(db, "SET a foo")
+	mustExecStatement(db, "BEGIN")
+	claim.NoError(assertCount(db, "foo", 1))
+}
+
 func mustGet(db *database.Database, name string) string {
 	text := "GET " + name
 	stmt, err := parser.Parse(text)

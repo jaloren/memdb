@@ -68,3 +68,11 @@ func TestCountWithTransaction(t *testing.T) {
 	db.Transaction.Set("b", "foo")
 	claim.Equal(2, db.Transaction.Count("foo"))
 }
+
+func TestCountFromRootTransaction(t *testing.T) {
+	claim := assert.New(t)
+	db := New()
+	db.Transaction.Set("a", "foo")
+	db.Transaction = db.Transaction.Begin()
+	claim.Equal(1, db.Transaction.Count("foo"))
+}
